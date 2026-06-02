@@ -132,8 +132,8 @@ func buildRefreshedSession(ctx context.Context, cfg AppConfig, account NotionAcc
 		UserID:        userID,
 		UserEmail:     firstNonEmpty(spaces.Email, prior.UserEmail, account.Email),
 		UserName:      userName,
-		SpaceID:       firstNonEmpty(spaces.SpaceID, prior.SpaceID, account.SpaceID),
-		SpaceViewID:   firstNonEmpty(spaces.SpaceViewID, prior.SpaceViewID, account.SpaceViewID),
+		SpaceID:       firstNonEmpty(prior.SpaceID, account.SpaceID, spaces.SpaceID),
+		SpaceViewID:   firstNonEmpty(prior.SpaceViewID, account.SpaceViewID, spaces.SpaceViewID),
 		SpaceName:     spaceName,
 		Cookies:       cookies,
 	}, nil

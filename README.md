@@ -1,137 +1,281 @@
-# Notion2API
+# Notion2API - Fork with Tool Calls Support
 
-一个基于 Go 的 Notion AI OpenAI 兼容桥接服务，提供标准 API、WebUI 管理面、多账号池和本地 SQLite 持久化，方便本地部署、调试和统一接入。
+Một bridge service mã nguồn mở, viết bằng Go, chuyển đổi Notion AI thành API tương thích OpenAI. Fork này bổ sung hỗ trợ **tool_calls** (function calling) ở cấp gateway, cho phép tích hợp với các AI agent như Droid, Cursor, Windsurf, và các công cụ hỗ trợ OpenAI function calling khác.
 
-## 功能概览
+## Tính năng chính
 
-- OpenAI 兼容接口：`/v1/models`、`/v1/chat/completions`、`/v1/responses`
-- 支持流式响应
-- 支持多账号池、账号切换、登录态刷新
-- 支持图片、PDF、CSV 等附件请求
-- 自带 WebUI 管理面：`/admin`
-- 使用 SQLite 持久化账号、会话和运行状态
+### API tương thích OpenAI
+- `/v1/models` - Danh sách models có sẵn
+- `/v1/chat/completions` - Chat completions (hỗ trợ streaming)
+- `/v1/responses` - Responses API
+- `/healthz` - Health check
 
-## 快速开始
+### Models được hỗ trợ
+| Model ID | Codename Notion | Provider | Ghi chú |
+|----------|----------------|----------|---------|
+| `auto` | (tự động) | System | Mặc định |
+| `opus-4.8` | `ambrosia-tart-high` | Anthropic | Mới nhất |
+| `opus-4.7` | `apricot-sorbet-medium` | Anthropic | |
+| `opus-4.6` | `avocado-froyo-medium` | Anthropic | |
+| `gpt-5.5` | `opal-quince-medium` | OpenAI | Mới nhất |
+| `gpt-5.4` | `oval-kumquat-medium` | OpenAI | |
+| `gpt-5.2` | `oatmeal-cookie` | OpenAI | |
+| `grok-4.3` | `xigua-mochi-medium` | xAI | Mới nhất |
+| `sonnet-4.6` | `almond-croissant-low` | Anthropic | |
+| `haiku-4.5` | `anthropic-haiku-4.5` | Anthropic | |
+| `gemini-3.1-pro` | `galette-medium-thinking` | Google | |
+| `gemini-2.5-flash` | `vertex-gemini-2.5-flash` | Google | |
+| `gemini-3-flash` | `gingerbread` | Google | |
+| `minimax-m2.5` | `fireworks-minimax-m2.5` | MiniMax | |
 
-### 本地运行
+### Tool Calls (Function Calling)
+Fork này bổ sung hỗ trợ tool_calls ở cấp gateway:
+- **Deterministic synthesis**: Gateway tự tạo tool_call từ prompt client
+- **Hỗ trợ các tool phổ biến**: `read_file`, `edit_file`, `grep`, `execute_command`, v.v.
+- **Generic argument extraction**: Tự động extract arguments từ schema
+- **Tool result handling**: Xử lý kết quả tool và gửi cho Notion để tạo response cuối
+- **Multi-turn tool loop**: Hỗ trợ nhiều vòng gọi tool liên tiếp
+
+### Quản lý
+- WebUI quản trị tại `/admin`
+- Multi-account pool với load balancing
+- Session persistence qua SQLite
+- Cookie-based authentication
+
+## Cài đặt
+
+### Yêu cầu
+- Go 1.25.0+ (nếu build từ source)
+- Notion account với AI access
+- Browser cookies từ Notion
+
+### Build từ source
 
 ```bash
-go run ./cmd/notion2api --config ./config.example.json
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/notion2api-fork.git
+cd notion2api-fork
+
+# Build
+go build -o notion2api ./cmd/notion2api/
+
+# Chạy
+./notion2api --config ./config.example.json
 ```
 
-### 本地构建
+### Cấu hình
 
-```bash
-go build ./cmd/notion2api
+Tạo file `config.json` từ mẫu:
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 8787,
+  "api_key": "YOUR_API_KEY",
+  "admin": {
+    "enabled": true,
+    "password": "YOUR_ADMIN_PASSWORD"
+  },
+  "probe_json": "probe_files/default/probe.json",
+  "model_id": "auto",
+  "features": {
+    "use_web_search": true,
+    "enable_generate_image": true
+  }
+}
 ```
 
-## Docker 部署
+### Lấy Notion Cookies
 
-先按实际环境修改 `config.docker.json`，再启动：
+1. Đăng nhập vào Notion trong trình duyệt
+2. Sử dụng script `convert_cookies.sh` để chuyển đổi cookies:
+   ```bash
+   ./convert_cookies.sh cookies-export.json
+   ```
+3. Copy kết quả vào `probe_files/default/probe.json`
+
+## Sử dụng
+
+### Chat completions
 
 ```bash
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "opus-4.8",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'
+```
+
+### Tool calls (Function calling)
+
+```bash
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "opus-4.8",
+    "messages": [{"role": "user", "content": "Read /tmp/test.txt"}],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "Read a local file",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_path": {"type": "string"}
+          },
+          "required": ["file_path"]
+        }
+      }
+    }],
+    "tool_choice": "auto",
+    "stream": false
+  }'
+```
+
+Response sẽ chứa `tool_calls` với arguments được extract tự động:
+
+```json
+{
+  "choices": [{
+    "finish_reason": "tool_calls",
+    "message": {
+      "role": "assistant",
+      "tool_calls": [{
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "read_file",
+          "arguments": "{\"file_path\":\"/tmp/test.txt\"}"
+        }
+      }]
+    }
+  }]
+}
+```
+
+### Tool result follow-up
+
+Sau khi nhận tool_calls, client thực thi tool và gửi kết quả lại:
+
+```bash
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "opus-4.8",
+    "messages": [
+      {"role": "user", "content": "Read /tmp/test.txt"},
+      {"role": "assistant", "content": null, "tool_calls": [...]},
+      {"role": "tool", "tool_call_id": "call_0", "content": "file content here"}
+    ],
+    "tools": [...],
+    "stream": false
+  }'
+```
+
+## Deploy với Cloudflare Tunnel
+
+Để expose API ra internet qua Cloudflare:
+
+```bash
+# Cài cloudflared
+# Đăng nhập Cloudflare
+cloudflared tunnel login
+
+# Tạo tunnel
+cloudflared tunnel create notion-api
+
+# Cấu hình tunnel
+cat > ~/.cloudflared/config.yml << EOF
+tunnel: YOUR_TUNNEL_ID
+credentials-file: /home/user/.cloudflared/YOUR_TUNNEL_ID.json
+ingress:
+  - hostname: notion.yourdomain.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404
+EOF
+
+# Tạo DNS record
+cloudflared tunnel route dns notion-api notion.yourdomain.com
+
+# Chạy tunnel
+cloudflared tunnel run notion-api
+```
+
+## Docker
+
+```bash
+# Sử dụng docker-compose
 docker compose up -d --build
+
+# Hoặc build manual
+docker build -t notion2api .
+docker run -p 8787:8787 -v ./config.json:/app/config.json notion2api
 ```
 
-如果使用偏生产配置：
+## Phát triển
+
+### Cấu trúc project
+
+```
+notion2api-fork/
+├── cmd/notion2api/          # Entry point
+├── internal/app/            # Core application
+│   ├── main.go              # HTTP handlers
+│   ├── models.go            # Model registry
+│   ├── tool_calls.go        # Tool calls middleware
+│   ├── notion_client.go     # Notion API client
+│   ├── openai_types.go      # OpenAI request/response types
+│   └── ...
+├── static/admin/            # WebUI assets
+├── config.example.json      # Example config
+└── README.md
+```
+
+### Chạy tests
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+go test ./...
 ```
 
-本地从源码开发需 Go `1.25.0+`（`go.mod` 已声明）。
+### Thêm models mới
 
-## 默认入口
+1. Tìm codename Notion bằng cách capture network request trong Notion web
+2. Thêm vào `builtinModelDefinitions()` trong `models.go`:
+   ```go
+   {ID: "model-id", Name: "Model Name", NotionModel: "notion-codename", Family: "provider", Group: "group", Enabled: true, Aliases: []string{"alias1", "alias2"}},
+   ```
+3. Build lại và test
 
-- API：`http://127.0.0.1:8787/v1/*`
-- Health：`http://127.0.0.1:8787/healthz`
-- WebUI：`http://127.0.0.1:8787/admin`
+## So sánh với upstream
 
-## 代理与 Resin 粘性代理
+Fork này dựa trên [GALIAIS/Notion2API](https://github.com/GALIAIS/Notion2API) với các bổ sung:
 
-### 代理模式
+- ✅ Tool calls (function calling) support
+- ✅ Thêm models mới: opus-4.8, gpt-5.5, grok-4.3
+- ✅ Generic argument extraction cho Droid-style tools
+- ✅ Tool result handling và multi-turn support
+- ✅ Preserve probe workspace ID (không bị override)
 
-`proxy_mode` 支持：
+## License
 
-- `off`：关闭代理
-- `env`：从环境变量读取（优先 `N2A_*`）
-- `http`：固定 HTTP 代理
-- `https`：按协议拆分 HTTP/HTTPS 代理
-- `socks5`：SOCKS5/SOCKS5H 代理
-- `resin_forward`：Resin 粘性代理转发
+MIT License - Xem file `LICENSE` để biết chi tiết.
 
-### 环境变量优先级（`proxy_mode=env`）
+## Credits
 
-HTTPS 请求优先顺序：
+- Gốc: [GALIAIS/Notion2API](https://github.com/GALIAIS/Notion2API)
+- Fork với tool calls support bởi community
 
-1. `N2A_PROXY_HTTPS_URL`
-2. `N2A_UPSTREAM_PROXY_HTTPS_URL`
-3. `N2A_PROXY_URL`
-4. `N2A_UPSTREAM_PROXY_URL`
-5. `HTTPS_PROXY` / `https_proxy`
-6. `ALL_PROXY` / `all_proxy`
+## Hỗ trợ
 
-HTTP 请求优先顺序：
+- Issues: GitHub Issues
+- Discussions: GitHub Discussions
 
-1. `N2A_PROXY_HTTP_URL`
-2. `N2A_UPSTREAM_PROXY_HTTP_URL`
-3. `N2A_PROXY_URL`
-4. `N2A_UPSTREAM_PROXY_URL`
-5. `HTTP_PROXY` / `http_proxy`
-6. `ALL_PROXY` / `all_proxy`
+---
 
-也可以直接用环境变量覆盖配置文件中的代理字段：
-
-- `N2A_PROXY_MODE`
-- `N2A_PROXY_URL`
-- `N2A_PROXY_HTTP_URL`
-- `N2A_PROXY_HTTPS_URL`
-- `N2A_RESIN_ENABLED`
-- `N2A_RESIN_URL`
-- `N2A_RESIN_PLATFORM`
-- `N2A_RESIN_MODE`
-
-### Resin 粘性代理（按账号隔离）
-
-每个账号都可以独立设置粘性身份：
-
-- `accounts[].sticky_proxy_account`：显式设置粘性账号名（推荐）
-- 未设置时会回退到邮箱派生值
-
-当启用 `resin_forward` 时：
-
-- 代理认证用户名格式：`<resin_platform>.<sticky_proxy_account>`
-- 密码使用 `resin_url` 中 token
-- 请求会附带 `X-Resin-Account` 头
-
-## 配置说明
-
-建议优先检查这些字段：
-
-- `api_key`：OpenAI 兼容接口密钥
-- `admin.password`：WebUI 登录密码
-- `upstream_base_url` / `upstream_origin`
-- `proxy_mode` / `proxy_url` / `proxy_http_url` / `proxy_https_url`
-- `resin_enabled` / `resin_url` / `resin_platform` / `resin_mode`
-- `accounts[*].sticky_proxy_account`
-- `accounts` / `active_account`
-- `storage.sqlite_path`
-
-可直接参考：
-
-- `config.example.json`
-- `config.docker.json`
-
-## 使用建议
-
-- 首次启动后先访问 `/admin`，确认账号、配置和连通性是否正常
-- 修改管理台前端后需执行 `npm --prefix ./frontend run build:static`
-- 调整会话延续与存储时，建议同步检查 `internal/app/sqlite_store.go` 的 schema 与迁移兼容性
-
-## 开源协议
-
-MIT License
-
-## 致谢
-
-本项目已在 [LINUX DO 社区](https://linux.do) 发布，感谢社区的支持与反馈。
+**Lưu ý**: Đây là công cụ reverse-engineered, sử dụng Notion AI không chính thức. Sử dụng có trách nhiệm và tuân thủ Terms of Service của Notion.

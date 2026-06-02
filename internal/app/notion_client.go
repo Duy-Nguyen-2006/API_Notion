@@ -588,6 +588,8 @@ func (c *NotionAIClient) ensureSessionLiveMetadata(ctx context.Context) {
 	if len(c.Session.Cookies) == 0 || strings.TrimSpace(c.Session.UserID) == "" || strings.TrimSpace(c.Session.ClientVersion) == "" {
 		return
 	}
+	probeSpaceID := strings.TrimSpace(c.Session.SpaceID)
+	probeSpaceViewID := strings.TrimSpace(c.Session.SpaceViewID)
 	bestEffortCtx, cancel, ok := bestEffortContext(ctx, bestEffortUpstreamTimeout)
 	if !ok {
 		return
@@ -606,9 +608,13 @@ func (c *NotionAIClient) ensureSessionLiveMetadata(ctx context.Context) {
 			meta := parseLoadUserContentMetadata(payload)
 			c.Session.UserEmail = firstNonEmpty(strings.TrimSpace(c.Session.UserEmail), strings.TrimSpace(meta.Email))
 			c.Session.UserName = firstNonEmpty(strings.TrimSpace(meta.UserName), strings.TrimSpace(c.Session.UserName))
-			c.Session.SpaceID = firstNonEmpty(strings.TrimSpace(c.Session.SpaceID), strings.TrimSpace(meta.SpaceID))
-			c.Session.SpaceViewID = firstNonEmpty(strings.TrimSpace(c.Session.SpaceViewID), strings.TrimSpace(meta.SpaceViewID))
-			c.Session.SpaceName = firstNonEmpty(strings.TrimSpace(meta.SpaceName), strings.TrimSpace(c.Session.SpaceName))
+			if probeSpaceID == "" {
+				c.Session.SpaceID = strings.TrimSpace(meta.SpaceID)
+			}
+			if probeSpaceViewID == "" {
+				c.Session.SpaceViewID = strings.TrimSpace(meta.SpaceViewID)
+			}
+			c.Session.SpaceName = firstNonEmpty(strings.TrimSpace(c.Session.SpaceName), strings.TrimSpace(meta.SpaceName))
 		}
 	} else {
 		c.logBestEffortFailure("loadUserContent", err)
@@ -638,8 +644,12 @@ func (c *NotionAIClient) ensureSessionLiveMetadata(ctx context.Context) {
 	}
 	c.Session.UserEmail = firstNonEmpty(strings.TrimSpace(c.Session.UserEmail), strings.TrimSpace(bootstrap.Email))
 	c.Session.UserName = firstNonEmpty(strings.TrimSpace(bootstrap.UserName), strings.TrimSpace(c.Session.UserName))
-	c.Session.SpaceID = firstNonEmpty(strings.TrimSpace(c.Session.SpaceID), strings.TrimSpace(bootstrap.SpaceID))
-	c.Session.SpaceViewID = strings.TrimSpace(bootstrap.SpaceViewID)
+	if probeSpaceID == "" {
+		c.Session.SpaceID = firstNonEmpty(strings.TrimSpace(c.Session.SpaceID), strings.TrimSpace(bootstrap.SpaceID))
+	}
+	if probeSpaceViewID == "" {
+		c.Session.SpaceViewID = strings.TrimSpace(bootstrap.SpaceViewID)
+	}
 	_ = c.persistSessionProbe()
 }
 

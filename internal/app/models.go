@@ -49,9 +49,12 @@ func builtinModelDefinitions() []ModelDefinition {
 		{ID: "opus-4.6", Name: "Opus 4.6", NotionModel: "avocado-froyo-medium", Family: "anthropic", Group: "intelligent", Beta: true, Enabled: true, Aliases: []string{"claude-opus-4.6", "avocado-froyo-medium"}},
 		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini", NotionModel: "oregon-grape-medium", Family: "openai", Group: "fast", Beta: true, Enabled: true, Aliases: []string{"oregon-grape-medium"}},
 		{ID: "gpt-5.4-nano", Name: "GPT-5.4 Nano", NotionModel: "otaheite-apple-medium", Family: "openai", Group: "fast", Beta: true, Enabled: true, Aliases: []string{"otaheite-apple-medium"}},
+		{ID: "grok-4.3", Name: "Grok 4.3", NotionModel: "xigua-mochi-medium", Family: "xai", Group: "intelligent", Beta: true, Enabled: true, Aliases: []string{"grok43", "xigua-mochi-medium"}},
 		{ID: "minimax-m2.5", Name: "MiniMax M2.5", NotionModel: "fireworks-minimax-m2.5", Family: "mystery", Group: "intelligent", Enabled: true, Aliases: []string{"fireworks-minimax-m2.5"}},
 		{ID: "haiku-4.5", Name: "Haiku 4.5", NotionModel: "anthropic-haiku-4.5", Family: "anthropic", Group: "fast", Enabled: true, Aliases: []string{"claude-haiku-4.5", "anthropic-haiku-4.5"}},
 		{ID: "gemini-3-flash", Name: "Gemini 3 Flash", NotionModel: "gingerbread", Family: "gemini", Group: "fast", Enabled: true, Aliases: []string{"gingerbread"}},
+		{ID: "opus-4.8", Name: "Opus 4.8", NotionModel: "ambrosia-tart-high", Family: "anthropic", Group: "intelligent", Beta: true, Enabled: true, Aliases: []string{"claude-opus-4.8", "opus48", "ambrosia-tart-high"}},
+		{ID: "gpt-5.5", Name: "GPT-5.5", NotionModel: "opal-quince-medium", Family: "openai", Group: "fast", Beta: true, Enabled: true, Aliases: []string{"gpt55", "opal-quince-medium"}},
 	}
 }
 
@@ -430,6 +433,7 @@ func slugModelID(value string) string {
 	}
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "测试版", "")
+	value = strings.ReplaceAll(value, "beta", "")
 	var b strings.Builder
 	lastDash := false
 	for _, r := range value {

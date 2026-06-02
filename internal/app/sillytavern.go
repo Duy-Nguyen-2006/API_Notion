@@ -262,11 +262,11 @@ func looksLikeSillyTavernQuiet(systemPrompts []string, segments []conversationPr
 			strings.Contains(lower, "translate") ||
 			strings.Contains(lower, "describe") ||
 			strings.Contains(lower, "caption") ||
-			strings.Contains(lower, "不要续写") ||
-			strings.Contains(lower, "总结") ||
-			strings.Contains(lower, "概括") ||
-			strings.Contains(lower, "提炼") ||
-			strings.Contains(lower, "改写") {
+			strings.Contains(lower, "do not continue") ||
+			strings.Contains(lower, "summarize") ||
+			strings.Contains(lower, "sum up") ||
+			strings.Contains(lower, "extract") ||
+			strings.Contains(lower, "rewrite") {
 			return true
 		}
 	}

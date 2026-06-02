@@ -26,27 +26,26 @@ var (
 	promptGuardParagraphSplit = regexp.MustCompile(`\n\s*\n+`)
 	promptGuardIdentityHints  = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\b(?:i(?:'m| am)\s+notion\s+ai)\b`),
-		regexp.MustCompile(`(?is)^\s*我是\s*notion\s*ai\b`),
-		regexp.MustCompile(`(?is)^\s*我是\s*notion\s*的?\s*ai\b`),
-		regexp.MustCompile(`(?is)^\s*notion\s*ai\s*(?:在这里|here)\b`),
+		regexp.MustCompile(`(?is)^\s*i(?:'m| am)\s+notion\s+ai\b`),
+		regexp.MustCompile(`(?is)^\s*notion\s+ai\s+(?:is\s+)?here\b`),
 	}
 	promptGuardRestrictionHints = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\b(?:notion\s+workspace|notion\s+pages?|notion\s+databases?|notion\s+docs?)\b`),
 		regexp.MustCompile(`(?is)not\s+(?:a\s+)?(?:general|general-purpose)\s+assistant`),
 		regexp.MustCompile(`(?is)(?:only|just)\s+(?:help|assist|answer).{0,40}\bnotion\b`),
 		regexp.MustCompile(`(?is)(?:can(?:not|'t)|won't|unable\s+to|not\s+able\s+to).{0,48}(?:roleplay|fictional\s+character|creative\s+roleplay)`),
-		regexp.MustCompile(`(?is)专门帮助你在\s*notion\s*(?:工作区|workspace)`),
-		regexp.MustCompile(`(?is)只能帮助你?.{0,24}notion`),
-		regexp.MustCompile(`(?is)我没办法.{0,24}(?:扮演|进行).{0,24}(?:虚构角色|角色扮演)`),
-		regexp.MustCompile(`(?is)可以帮你(?:在|处理)?.{0,32}notion`),
+		regexp.MustCompile(`(?is)dedicated\s+to\s+helping\s+(?:you\s+)?(?:in|with)\s+notion\s+workspace`),
+		regexp.MustCompile(`(?is)can\s+only\s+help\s+(?:you\s+)?.{0,24}notion`),
+		regexp.MustCompile(`(?is)(?:can't|cannot)\s+(?:扮演|roleplay).{0,24}(?:fictional\s+character|creative\s+roleplay)`),
+		regexp.MustCompile(`(?is)can\s+help\s+(?:you\s+)?(?:with|in)\s+.{0,32}notion`),
 	}
 	promptGuardStrongRefusalPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\bi(?:'m| am)\s+notion\s+ai\b.{0,220}\b(?:workspace|pages?|databases?|docs?)\b`),
-		regexp.MustCompile(`(?is)^\s*我是\s*notion\s*ai\b.{0,220}(?:工作区|页面|数据库|文档)`),
+		regexp.MustCompile(`(?is)^\s*i(?:'m| am)\s+notion\s+ai\b.{0,220}(?:workspace|pages?|databases?|docs?)`),
 		regexp.MustCompile(`(?is)^\s*i\s+(?:can|can\s+only)\s+help.{0,140}\bnotion\b`),
-		regexp.MustCompile(`(?is)^\s*我(?:只能|仅能|只可以).{0,40}notion`),
+		regexp.MustCompile(`(?is)^\s*i\s+can\s+only\s+.{0,40}notion`),
 		regexp.MustCompile(`(?is)(?:can't|cannot|won't|unable\s+to|not\s+able\s+to).{0,64}(?:roleplay|fictional\s+character|creative\s+writing|creative\s+roleplay)`),
-		regexp.MustCompile(`(?is)我没办法.{0,24}(?:扮演|进行).{0,24}(?:虚构角色|角色扮演)`),
+		regexp.MustCompile(`(?is)(?:can't|cannot)\s+(?:扮演|roleplay).{0,24}(?:fictional\s+character|creative\s+roleplay)`),
 	}
 )
 
@@ -211,7 +210,7 @@ func promptGuardStripRetryPrefixes(cfg AppConfig, text string) string {
 
 var promptGuardCodingRequestPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(code|coding|program|function|class|bug|debug|refactor|api|sdk|javascript|typescript|python|golang|rust|docker|sql|bash|shell|json|yaml|repository|repo|frontend|backend|server|client)\b`),
-	regexp.MustCompile(`代码|编程|开发|函数|脚本|调试|报错|异常|接口|部署|构建|数据库|仓库|前端|后端|服务端|客户端|测试|日志`),
+	regexp.MustCompile(`(?i)\b(code|programming|develop|script|debug|error|exception|endpoint|deploy|build|database|frontend|backend|server|client|test|log)\b`),
 	regexp.MustCompile("```"),
 }
 

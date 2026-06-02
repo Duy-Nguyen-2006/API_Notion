@@ -1651,7 +1651,13 @@ func (a *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		a.handleSillyTavernChatCompletionsPayload(w, r, payload)
 		return
 	}
-	messages := sliceValue(typed.Messages)
+	toolDefs := parseToolDefinitions(typed.Tools)
+	hasTools := len(toolDefs) > 0
+	messagesWithTools := typed.Messages
+	if hasTools {
+		messagesWithTools = injectToolsIntoMessages(typed.Messages, toolDefs)
+	}
+	messages := sliceValue(messagesWithTools)
 	if len(messages) == 0 {
 		writeOpenAIError(w, http.StatusBadRequest, "messages must be an array", "invalid_request_error", nilString())
 		return
@@ -1692,6 +1698,12 @@ func (a *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		SessionFingerprint: originalFingerprint,
 		RawMessageCount:    originalRawMessageCount,
 	}
+	if hasTools && !typed.Stream {
+		if toolCalls, ok := synthesizeToolCallFromMessages(typed.Messages, toolDefs, typed.ToolChoice); ok {
+			writeJSON(w, http.StatusOK, buildSyntheticToolCallCompletion(latestPrompt, toolCalls, entry.ID))
+			return
+		}
+	}
 	freshThreadMode := forceFreshThreadPerRequest(cfg)
 	conversation := ConversationEntry{}
 	if matched, ok := a.resolveContinuationConversationWithExplicit("", hiddenPrompt, normalized.Segments, preferredConversationID, explicitThreadID); ok {
@@ -1730,7 +1742,7 @@ func (a *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result = applyInferenceResultOutputPolicy(result, request)
-	responsePayload := buildChatCompletion(result, entry.ID, cfg.DebugUpstream)
+	responsePayload := buildChatCompletionWithToolCalls(result, entry.ID, cfg.DebugUpstream, hasTools)
 	attachConversationResponseMetadata(responsePayload, conversationID, result.ThreadID)
 	setThreadIDHeader(w, result.ThreadID)
 	a.markConversationEnvelope(conversationID, "", stringValue(responsePayload["id"]))
