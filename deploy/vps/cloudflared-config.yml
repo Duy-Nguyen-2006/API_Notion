@@ -1,0 +1,7 @@
+tunnel: f6d87bf2-7390-4523-9291-22eb192c4116
+credentials-file: /root/.cloudflared/f6d87bf2-7390-4523-9291-22eb192c4116.json
+
+ingress:
+  - hostname: api.lgmmo.click
+    service: http://127.0.0.1:8300
+  - service: http_status:404

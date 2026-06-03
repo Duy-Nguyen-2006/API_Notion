@@ -39,7 +39,7 @@ type probeModelsEnvelope struct {
 
 func builtinModelDefinitions() []ModelDefinition {
 	return []ModelDefinition{
-		{ID: "auto", Name: "Auto", NotionModel: "", Family: "system", Group: "default", Enabled: true, Aliases: []string{"default", "workflow", "notion-ai-workflow"}},
+		{ID: "auto", Name: "Auto (deprecated, use opus-4.8)", NotionModel: "", Family: "system", Group: "default", Enabled: false, Aliases: []string{"default", "workflow", "notion-ai-workflow"}},
 		{ID: "gpt-5.2", Name: "GPT-5.2", NotionModel: "oatmeal-cookie", Family: "openai", Group: "fast", Beta: true, Enabled: true, Aliases: []string{"gpt52", "oatmeal-cookie"}},
 		{ID: "gpt-5.4", Name: "GPT-5.4", NotionModel: "oval-kumquat-medium", Family: "openai", Group: "fast", Beta: true, Enabled: true, Aliases: []string{"gpt54", "oval-kumquat-medium"}},
 		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", NotionModel: "vertex-gemini-2.5-flash", Family: "gemini", Group: "fast", Enabled: true, Aliases: []string{"vertex-gemini-2.5-flash"}},

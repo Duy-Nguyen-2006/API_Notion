@@ -58,9 +58,14 @@ func orchestratorMessagesPrompt(messages []orchestrator.Message) string {
 	return strings.TrimSpace(out.String())
 }
 
+var orchestratorModelIDs = []string{"auto", "opus-4.8"}
+
 func shouldUseOrchestratorChat(typed chatCompletionsRequestBody, payload map[string]any, requestedModelID string) bool {
-	if strings.EqualFold(strings.TrimSpace(requestedModelID), "auto") {
-		return true
+	cleaned := strings.ToLower(strings.TrimSpace(requestedModelID))
+	for _, id := range orchestratorModelIDs {
+		if cleaned == id {
+			return true
+		}
 	}
 	if enabled, ok := parseAgentConfigEnabled(typed.AgentConfig); ok {
 		return enabled
@@ -131,12 +136,16 @@ func (w *chatCompletionSSEWriter) Text() string {
 // if the configuration is insufficient (e.g. model "auto" but no upstream
 // session is available to act as the reasoner).
 func (a *App) validateOrchestratorConfig(modelID string) error {
-	if strings.EqualFold(strings.TrimSpace(modelID), "auto") {
-		a.State.mu.RLock()
-		hasClient := a.State.Client != nil
-		a.State.mu.RUnlock()
-		if !hasClient {
-			return fmt.Errorf("orchestrator model \"auto\" requires a configured Notion session (reasoner client unavailable)")
+	cleaned := strings.ToLower(strings.TrimSpace(modelID))
+	for _, id := range orchestratorModelIDs {
+		if cleaned == id {
+			a.State.mu.RLock()
+			hasClient := a.State.Client != nil
+			a.State.mu.RUnlock()
+			if !hasClient {
+				return fmt.Errorf("orchestrator model %q requires a configured Notion session (reasoner client unavailable)", modelID)
+			}
+			break
 		}
 	}
 	return nil
