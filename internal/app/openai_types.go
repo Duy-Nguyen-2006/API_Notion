@@ -18,6 +18,7 @@ type chatCompletionsRequestBody struct {
 	NotionAccountEmail string   `json:"notion_account_email,omitempty"`
 	UseWebSearch       *bool    `json:"use_web_search,omitempty"`
 	Metadata           any      `json:"metadata,omitempty"`
+	AgentConfig        any      `json:"agent_config,omitempty"`
 	Tools              any      `json:"tools,omitempty"`
 	ToolChoice         any      `json:"tool_choice,omitempty"`
 	StreamOptions      any      `json:"stream_options,omitempty"`
@@ -137,6 +138,7 @@ func extractChatCompletionsRequestBody(payload map[string]any) chatCompletionsRe
 		body.ShowThoughts = &copyValue
 	}
 	body.Metadata = payload["metadata"]
+	body.AgentConfig = payload["agent_config"]
 	body.Tools = payload["tools"]
 	body.ToolChoice = payload["tool_choice"]
 	body.StreamOptions = payload["stream_options"]

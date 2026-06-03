@@ -1,0 +1,83 @@
+{
+  "probe_json": "probe_files/default/probe.json",
+  "host": "0.0.0.0",
+  "port": 8787,
+  "api_key": "${N2A_API_KEY}",
+  "upstream_base_url": "https://app.notion.com",
+  "upstream_origin": "https://app.notion.com",
+  "upstream_use_env_proxy": false,
+  "proxy_mode": "off",
+  "model_id": "auto",
+  "default_model": "auto",
+  "timeout_sec": 120,
+  "poll_interval_sec": 1.5,
+  "poll_max_rounds": 40,
+  "debug_upstream": false,
+  "stream_chunk_runes": 24,
+  "admin": {
+    "enabled": true,
+    "password": "${N2A_ADMIN_PASSWORD}",
+    "token_ttl_hours": 24,
+    "static_dir": "static/admin"
+  },
+  "responses": {
+    "store_ttl_seconds": 3600
+  },
+  "storage": {
+    "sqlite_path": "data/notion2api.sqlite",
+    "persist_conversations": true,
+    "persist_conversation_snapshots": true,
+    "persist_responses": true,
+    "persist_continuation_sessions": true,
+    "persist_sillytavern_bindings": true
+  },
+  "limits": {
+    "max_request_body_bytes": 4194304
+  },
+  "features": {
+    "use_web_search": true,
+    "use_read_only_mode": false,
+    "force_disable_upstream_edits": false,
+    "force_fresh_thread_per_request": false,
+    "writer_mode": false,
+    "enable_generate_image": true,
+    "enable_csv_attachment_support": true,
+    "ai_surface": "ai_module",
+    "thread_type": "workflow",
+    "search_scopes": []
+  },
+  "session_refresh": {
+    "enabled": true,
+    "interval_sec": 900,
+    "startup_check": true,
+    "retry_on_auth_error": true,
+    "auto_switch_account": true
+  },
+  "dispatch": {
+    "probe_cache_ttl_seconds": 45
+  },
+  "debug": {
+    "pprof_enabled": false,
+    "pprof_addr": "127.0.0.1:6060"
+  },
+  "prompt": {
+    "profile": "cognitive_reframing",
+    "fallback_profiles": ["toolbox_capability_expansion"],
+    "max_escalation_steps": 1,
+    "max_refusal_retries": 2
+  },
+  "orchestrator": {
+    "_comment": "Orchestrator defaults baked into OrchestratorOptions; these are reference values.",
+    "max_concurrent_tools": 8,
+    "rate_limit_per_second": 0,
+    "hedge_reasoner_ms": 800,
+    "execute_enabled": false,
+    "tool_cache_enabled": true,
+    "cb_threshold": 5,
+    "cb_recovery_sec": 30,
+    "retry_max_attempts": 3,
+    "retry_base_delay_ms": 500,
+    "executor_timeout_sec": 30,
+    "reasoner_timeout_sec": 60
+  }
+}

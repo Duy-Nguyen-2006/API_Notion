@@ -276,6 +276,10 @@ func writePrometheusMetrics(w http.ResponseWriter) {
 	_, _ = fmt.Fprintln(w, "# HELP notion2api_response_store_prune_total Total number of pruned in-memory response entries by reason.")
 	_, _ = fmt.Fprintln(w, "# TYPE notion2api_response_store_prune_total counter")
 	writeResponseStorePruneCounter(w)
+
+	if orchestratorMetricsWriter != nil {
+		orchestratorMetricsWriter(w)
+	}
 }
 
 func writeRequestDurationHistogram(w http.ResponseWriter) {

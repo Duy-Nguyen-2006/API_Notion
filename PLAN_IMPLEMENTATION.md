@@ -1,569 +1,453 @@
-# PLAN: Implementation Orchestrator-Reasoner
+# PLAN: Implementation Orchestrator-Reasoner (v2 — Performance-First)
+
+> Viết lại từ v1. Thứ tự triển khai được **sắp lại theo ưu tiên hiệu năng**: dựng đường đi latency tối ưu (router upfront → tool song song → straight-to-reasoner → streaming) NGAY từ prototype, thay vì để tối ưu xuống cuối.
 
 ## 1. Executive Summary
 
-**Goal**: Implement hybrid architecture where mimo-v2.5-pro (executor) handles tool calls và Notion AI (reasoner) handles reasoning.
+**Goal**: Hybrid Orchestrator-Reasoner — local router/tool planner (ưu tiên path rõ) + mimo-v2.5-pro (executor fallback, gom context qua tool khi router không đủ chắc) + Notion AI (reasoner, suy luận ≤ 1 lần), điều phối bởi **router local**. Tối ưu **độ trễ thấp nhất** và **hiệu quả cao nhất**.
 
-**Timeline**: 8 weeks (2 weeks prototype → 2 weeks alpha → 2 weeks beta → 2 weeks production)
+**Latency targets**: p50 < 3s, p99 < 12s, TTFT < 2s, direct tool-only = 0 model RTT, read+reason = 1 RTT, worst-case complex fallback ≤ 2 model round-trip.
 
-**Effort**: ~200-300 hours
+**Timeline**: 8 tuần (2 prototype → 2 alpha → 2 beta → 2 production).
 
-**Risk**: Medium-High (complex architecture, multiple integration points)
+**Effort**: ~200–260h (1 dev chính + 1 senior review).
+
+**Risk**: Medium (kiến trúc rõ, dependency reasoner là rủi ro chính về tail latency).
 
 ## 2. Prerequisites
 
 ### 2.1 Infrastructure
-- [x] Notion AI API (notion.lgmmo.click) - đang hoạt động
-- [x] mimo-v2.5-pro API (api.lgmmo.click) - đang hoạt động
-- [x] Go development environment
-- [ ] Monitoring/Logging infrastructure
-- [ ] Load testing tools
+- [x] Notion AI API (`notion.lgmmo.click`) — hoạt động (chat-only, làm reasoner).
+- [x] mimo-v2.5-pro API (`api.lgmmo.click`) — hoạt động (executor, tool calls).
+- [ ] Go toolchain available in PATH (`go version`; repo yêu cầu Go 1.25.0). Ghi chú kiểm tra gần nhất: `go` chưa có trong PATH.
+- [ ] Monitoring/logging (per-stage latency span).
+- [ ] Load testing tools.
 
 ### 2.2 Knowledge
-- [x] OpenAI API format
-- [x] Notion API quirks
-- [x] Go concurrency patterns
-- [ ] Agent architecture patterns (need research)
-- [ ] Intent classification (need research)
+- [x] OpenAI API format, Go concurrency.
+- [ ] Xác nhận: Notion hỗ trợ SSE streaming? mimo emit multi tool-call/lượt? mimo có prefix cache? (multi tool-call không còn là blocker nhờ direct local planner).
 
 ### 2.3 Resources
-- 1 Senior Engineer (review architecture)
-- 1 Developer (implementation)
-- Budget for API calls (~$50-100/month testing)
+- 1 Senior Engineer (review kiến trúc + latency gate).
+- 1 Developer (implementation).
+- Budget API ~$50–100/tháng test (hedging có thể tăng nhẹ chi phí reasoner).
 
 ## 3. Detailed Implementation Plan
 
-### Phase 1: Prototype (Week 1-2)
+### Phase 1: Prototype (Week 1-2) — dựng latency-optimal path ngay
 
-#### Week 1: Foundation
+#### Week 1: Foundation + Router
 
-**Day 1-2: Architecture Setup**
+**Day 1-2: Architecture + interfaces**
 ```
 Tasks:
-- [ ] Create new package: internal/orchestrator/
-- [ ] Define interfaces: Agent, Tool, ModelClient
-- [ ] Implement basic AgentLoopController
-- [ ] Add unit tests skeleton
-
+- [ ] Package internal/orchestrator/
+- [ ] Interfaces: Tool, ModelClient, StreamWriter, TraceRecorder
+- [ ] Skeleton Controller + unit test skeleton
 Files:
-- internal/orchestrator/agent.go
-- internal/orchestrator/tool.go
-- internal/orchestrator/model.go
-- internal/orchestrator/loop.go
+- internal/orchestrator/{agent,tool,model,loop}.go
 - internal/orchestrator/loop_test.go
 ```
 
-**Day 3-4: Tool Registry**
+**Day 3: Router LOCAL (quyết reasoning upfront)**
 ```
 Tasks:
-- [ ] Implement Tool interface
-- [ ] Create ReadFileTool
-- [ ] Create ListDirTool
-- [ ] Create SearchTool
-- [ ] Add tool tests
-
+- [ ] IntentClassifier rule + heuristic (song ngữ Việt-Anh)
+- [ ] Router.Decide() trả Decision{NeedsTools, NeedsReasoner, Tools, Prefetch, DirectToolPlan}
+- [ ] Direct local tool plan khi path/search/list rõ; fallback an toàn khi không khớp keyword
+- [ ] Router tests (đặc biệt ca không có keyword)
 Files:
-- internal/orchestrator/tools/registry.go
-- internal/orchestrator/tools/read_file.go
-- internal/orchestrator/tools/list_dir.go
-- internal/orchestrator/tools/search.go
-- internal/orchestrator/tools/*_test.go
+- internal/orchestrator/router.go, classifier.go, patterns.json
 ```
 
-**Day 5: Model Clients**
+**Day 4: Tool Registry — thiết kế giảm round-trip**
 ```
 Tasks:
-- [ ] Implement ExecutorClient (calls mimo-v2.5-pro)
-- [ ] Implement ReasonerClient (calls Notion AI)
-- [ ] Add retry/timeout logic
-- [ ] Add client tests
-
+- [ ] Tool interface
+- [ ] Local direct tool planner
+- [ ] read_files (PLURAL + glob)   <-- ưu tiên
+- [ ] list_dir (kèm preview/size)
+- [ ] search (trả snippet + line range)
+- [ ] Tool tests
 Files:
-- internal/orchestrator/executor.go
-- internal/orchestrator/reasoner.go
-- internal/orchestrator/executor_test.go
-- internal/orchestrator/reasoner_test.go
+- internal/orchestrator/tools/{registry,read_files,list_dir,search}.go
 ```
 
-#### Week 2: Integration
-
-**Day 6-7: Agent Loop**
+**Day 5: Model Clients + connection pooling**
 ```
 Tasks:
-- [ ] Implement full agent loop
-- [ ] Add tool call handling
-- [ ] Add reasoning threshold logic
-- [ ] Add loop tests
-
+- [ ] ReasonerClient (Notion) — pooled, max_tokens chặt
+- [ ] ExecutorClient (mimo) — fallback planner, reuse *http.Client, HTTP/2, keep-alive
+- [ ] Streaming support (SSE) cho cả hai
+- [ ] Retry/timeout/circuit breaker cơ bản
+- [ ] Client tests
 Files:
-- internal/orchestrator/loop.go (update)
-- internal/orchestrator/loop_test.go (update)
+- internal/orchestrator/{executor,reasoner,httpclient}.go + *_test.go
 ```
 
-**Day 8-9: HTTP Handler**
+#### Week 2: Loop tối ưu + Streaming
+
+**Day 6-7: Agent Loop (parallel tools + straight-to-reasoner)**
 ```
 Tasks:
-- [ ] Create /v1/agent/chat endpoint
-- [ ] Parse agent_config from request
-- [ ] Format response with agent_trace
-- [ ] Add handler tests
-
+- [ ] Fast-path: NeedsTools=false → 1 model stream
+- [ ] Direct-tool-path: router synthesize plan → RunParallel(errgroup+semaphore) → local response hoặc straight-to-reasoner
+- [ ] Executor-fallback-path: executor → RunParallel(errgroup+semaphore) → straight-to-reasoner khi router không đủ chắc
+- [ ] KHÔNG loop về executor để finalize khi NeedsReasoner
+- [ ] max_iterations + context cancel
+- [ ] Loop tests (đếm model_round_trips)
 Files:
-- internal/app/agent_handler.go
-- internal/app/agent_handler_test.go
+- internal/orchestrator/loop.go, planner.go, pool.go (+ tests)
 ```
 
-**Day 10: Integration Test**
+**Day 8: Context Manager (distill token)**
 ```
 Tasks:
-- [ ] End-to-end test: simple chat
-- [ ] End-to-end test: tool call
-- [ ] End-to-end test: reasoning
-- [ ] Fix bugs found
+- [ ] Distill tool results (line range, không dump raw)
+- [ ] BuildReasonerContext: strip scaffolding + token budget
+- [ ] Tests đo token reduction
+Files:
+- internal/orchestrator/context.go (+ test)
 ```
 
-**Deliverables:**
-- Working prototype with 3 tools
-- Basic agent loop
-- Unit tests (80%+ coverage)
-- Integration tests (3 scenarios)
+**Day 9: HTTP handler + streaming passthrough**
+```
+Tasks:
+- [ ] Tích hợp opt-in vào route hiện có `/v1/chat/completions` (OpenAI-compatible, stream=true); không tạo `/v1/agent/chat` ở prototype
+- [ ] SSE passthrough reasoner → client
+- [ ] agent_trace (model_round_trips, ttft_ms, stage_latency_ms)
+- [ ] Handler tests
+Files:
+- internal/app/openai.go (opt-in branch) + internal/orchestrator integration tests
+```
 
-**Success Criteria:**
-- [ ] Can read file via tool call
-- [ ] Can list directory via tool call
-- [ ] Can handle simple chat
-- [ ] Latency < 10s for simple requests
+**Day 10: Integration + latency baseline**
+```
+Tasks:
+- [ ] E2E: fast-path / direct-tool-path / complex
+- [ ] Đo baseline: TTFT, p50/p99, số round-trip mỗi scenario
+- [ ] Fix bug
+```
+
+**Deliverables:** prototype với read_files/list_dir/search, router local + direct tool planner, loop song song + straight-to-reasoner, streaming, trace latency. Unit 80%+, 3 integration scenario.
+
+**Success Criteria (latency-first):**
+- [ ] simple_chat: 1 RTT, TTFT < 2s
+- [ ] direct tool-only rõ path: 0 model RTT
+- [ ] read + reason: thường 1 model RTT
+- [ ] complex fallback (read nhiều file + reason): ≤ 2 model round-trip
+- [ ] đọc N file trong 1 tool turn (không đọc lẻ)
+- [ ] streaming hoạt động end-to-end
 
 ---
 
 ### Phase 2: Alpha (Week 3-4)
 
-#### Week 3: Enhanced Tools
+#### Week 3: Prefetch, tool còn lại, routing hoàn chỉnh
 
-**Day 11-12: More Tools**
+**Day 11-12: Prefetch + edit_file + execute hard-off config**
 ```
 Tasks:
-- [ ] Implement EditFileTool
-- [ ] Implement ExecuteCommandTool (sandboxed)
-- [ ] Implement GrepTool
-- [ ] Add tool tests
-
+- [ ] PrefetchAsync: khi path rõ, đọc song song với executor call
+- [ ] edit_file (invalidate tool cache theo path)
+- [ ] execute hard-off config + structured rejection; implementation deferred until security review
 Files:
-- internal/orchestrator/tools/edit_file.go
-- internal/orchestrator/tools/execute.go
-- internal/orchestrator/tools/grep.go
+- internal/orchestrator/tools/edit_file.go, internal/orchestrator/execute_policy.go, prefetch.go
 ```
 
-**Day 13-14: Intent Classifier**
+**Day 13-14: Classifier nâng cao + complexity estimation**
 ```
 Tasks:
-- [ ] Implement rule-based classifier
-- [ ] Add pattern matching
-- [ ] Add complexity estimation
-- [ ] Add classifier tests
+- [ ] Cải thiện rule, đo accuracy trên tập mẫu song ngữ
+- [ ] Complexity estimation → quyết max_iterations, needs_reasoner
+- [ ] Tests accuracy (mục tiêu >80%, đo cả ca miss keyword)
+```
 
+**Day 15: Smart routing finalize**
+```
+Tasks:
+- [ ] Skip reasoner cho file_read/file_edit (không cần suy luận)
+- [ ] Force reasoner cho code_analysis
+- [ ] Routing tests
+```
+
+#### Week 4: Resilience cho tail latency
+
+**Day 16-17: Circuit breaker + retry + fallback + HEDGING**
+```
+Tasks:
+- [ ] Circuit breaker per upstream
+- [ ] Retry backoff, timeout per-stage
+- [ ] Hedged request cho reasoner (hedge_reasoner_ms) -> cải thiện p99
+- [ ] Fallback executor-only khi reasoner chết
 Files:
-- internal/orchestrator/classifier.go
-- internal/orchestrator/classifier_test.go
-- internal/orchestrator/patterns.json
+- internal/orchestrator/{circuit_breaker,retry,fallback,hedge}.go
 ```
 
-**Day 15: Smart Routing**
+**Day 18-19: Logging & tracing (per-stage latency)**
 ```
 Tasks:
-- [ ] Route based on intent
-- [ ] Skip tools for simple chat
-- [ ] Force tools for file operations
-- [ ] Add routing tests
-
+- [ ] Structured logging + trace ID propagation
+- [ ] Span: router/executor_rtt/tool_exec/distill/reasoner_rtt/network
+- [ ] Metrics: model_round_trips, ttft, token per stage
 Files:
-- internal/orchestrator/router.go
-- internal/orchestrator/router_test.go
+- internal/orchestrator/{logger,tracer,metrics}.go
 ```
 
-#### Week 4: Error Handling
-
-**Day 16-17: Error Handling**
+**Day 20: Alpha testing + latency profiling**
 ```
 Tasks:
-- [ ] Implement circuit breaker
-- [ ] Add retry with backoff
-- [ ] Add timeout handling
-- [ ] Add fallback logic
-- [ ] Add error tests
-
-Files:
-- internal/orchestrator/circuit_breaker.go
-- internal/orchestrator/retry.go
-- internal/orchestrator/fallback.go
+- [ ] Profile hot path, xác nhận tool_exec ~0, RTT dominate
+- [ ] Tinh chỉnh hedge_reasoner_ms theo số đo
+- [ ] Bug fix + docs
 ```
 
-**Day 18-19: Logging & Tracing**
-```
-Tasks:
-- [ ] Add structured logging
-- [ ] Add trace ID propagation
-- [ ] Add metrics collection
-- [ ] Add logging tests
-
-Files:
-- internal/orchestrator/logger.go
-- internal/orchestrator/tracer.go
-- internal/orchestrator/metrics.go
-```
-
-**Day 20: Alpha Testing**
-```
-Tasks:
-- [ ] Manual testing all scenarios
-- [ ] Performance profiling
-- [ ] Bug fixes
-- [ ] Documentation updates
-```
-
-**Deliverables:**
-- All file tools implemented
-- Intent classifier
-- Error handling
-- Logging/Tracing
-- Alpha release
+**Deliverables:** read/list/search/edit tool path, prefetch, hedging, fallback, tracing per-stage; execute vẫn hard-off. Alpha release.
 
 **Success Criteria:**
-- [ ] All 6 tools working
-- [ ] Intent classification accurate >80%
-- [ ] Error rate <5%
-- [ ] Latency <15s for complex requests
+- [ ] Tất cả tool hoạt động, tool song song ổn định
+- [ ] Intent accuracy > 80% (kèm fallback an toàn)
+- [ ] Error rate < 5%
+- [ ] p99 < 15s với hedging bật
 
 ---
 
-### Phase 3: Beta (Week 5-6)
+### Phase 3: Beta (Week 5-6) — squeeze latency
 
-#### Week 5: Optimization
+#### Week 5: Caching + concurrency
 
-**Day 21-22: Caching**
+**Day 21-22: Caching (tool + prefix + reasoner response)**
 ```
 Tasks:
-- [ ] Cache tool results
-- [ ] Cache model responses
-- [ ] Implement cache invalidation
-- [ ] Add cache tests
-
+- [ ] Tool cache (path+mtime+size), invalidate on edit_file
+- [ ] Prefix cache: cố định system+tool schema đầu prompt
+- [ ] Reasoner response cache hash(query+distilled_context)
+- [ ] Cache tests + đo hit rate
 Files:
-- internal/orchestrator/cache.go
-- internal/orchestrator/cache_test.go
+- internal/orchestrator/cache.go (+ test)
 ```
 
-**Day 23-24: Concurrency**
+**Day 23-24: Concurrency + rate limit**
 ```
 Tasks:
-- [ ] Parallel tool execution
-- [ ] Request queuing
-- [ ] Rate limiting
-- [ ] Add concurrency tests
-
+- [ ] Bounded semaphore per upstream (max_concurrent)
+- [ ] Request queue, token-bucket rate limit
+- [ ] Concurrency tests
 Files:
-- internal/orchestrator/pool.go
-- internal/orchestrator/queue.go
-- internal/orchestrator/ratelimit.go
+- internal/orchestrator/{queue,ratelimit}.go
 ```
 
-**Day 25: Performance Tuning**
+**Day 25: Performance tuning**
 ```
 Tasks:
-- [ ] Profile hot paths
-- [ ] Optimize JSON parsing
-- [ ] Reduce allocations
-- [ ] Benchmark improvements
+- [ ] Tối ưu JSON parse (streaming/incremental tool_call)
+- [ ] Giảm allocation, benchmark trước/sau
+- [ ] Xác nhận giảm token reasoner sau distill
 ```
 
-#### Week 6: Testing & Docs
+#### Week 6: Load test + docs
 
-**Day 26-27: Load Testing**
+**Day 26-27: Load testing (đo round-trip & TTFT dưới tải)**
 ```
 Tasks:
-- [ ] Create load test scripts
-- [ ] Test 100 concurrent requests
-- [ ] Test 1000 requests/hour
-- [ ] Identify bottlenecks
-- [ ] Fix performance issues
-
+- [ ] 100 concurrent, 1000 req/h
+- [ ] Đo p50/p99 từng stage, model_round_trips trung bình
+- [ ] Tìm + fix bottleneck (thường là reasoner_rtt)
 Files:
-- tests/load/agent_test.go
-- tests/load/scenarios.json
+- tests/load/{agent_test.go,scenarios.json}
 ```
 
 **Day 28-29: Documentation**
 ```
-Tasks:
-- [ ] API documentation
-- [ ] Configuration guide
-- [ ] Troubleshooting guide
-- [ ] Architecture diagram
-
 Files:
-- docs/orchestrator-api.md
-- docs/orchestrator-config.md
-- docs/orchestrator-troubleshooting.md
+- docs/orchestrator-{api,config,troubleshooting}.md
+- docs/latency-tuning.md  <-- guide tối ưu round-trip & token
 ```
 
-**Day 30: Beta Release**
-```
-Tasks:
-- [ ] Final testing
-- [ ] Release notes
-- [ ] Deploy to staging
-- [ ] Notify stakeholders
-```
-
-**Deliverables:**
-- Caching layer
-- Concurrency support
-- Load test results
-- Documentation
-- Beta release
+**Day 30: Beta release** (final test, release notes, deploy staging).
 
 **Success Criteria:**
-- [ ] 100 concurrent requests handled
-- [ ] 99th percentile latency <20s
-- [ ] Error rate <2%
-- [ ] Cache hit rate >50%
+- [ ] 100 concurrent OK
+- [ ] p99 < 12s; p50 < 3s
+- [ ] Cache hit rate > 50%
+- [ ] Round-trip trung bình ≤ 2 cho task phức tạp
 
 ---
 
 ### Phase 4: Production (Week 7-8)
 
-#### Week 7: Production Prep
+#### Week 7: Production prep
 
 **Day 31-32: Monitoring**
 ```
 Tasks:
-- [ ] Set up Prometheus metrics
-- [ ] Create Grafana dashboards
-- [ ] Set up alerts
-- [ ] Add health checks
-
+- [ ] Prometheus: latency per-stage, round-trips, ttft, hit rate
+- [ ] Grafana dashboard + alert (p99, error rate, reasoner health)
+- [ ] Health checks + latency regression gate trong CI
 Files:
-- internal/orchestrator/prometheus.go
-- dashboards/orchestrator.json
-- alerts/orchestrator.yml
+- internal/orchestrator/prometheus.go, dashboards/orchestrator.json, alerts/orchestrator.yml
 ```
 
-**Day 33-34: Security Review**
+**Day 33-34: Security review (sandbox execute)**
 ```
 Tasks:
-- [ ] Audit tool permissions
-- [ ] Review sandbox config
-- [ ] Check API key handling
-- [ ] Penetration testing
-
+- [ ] Audit tool permission, sandbox scope cho execute
+- [ ] Kiểm tra path traversal / command escape
 Files:
 - docs/security-review.md
 ```
 
-**Day 35: Production Config**
+**Day 35: Production config**
 ```
 Tasks:
-- [ ] Production config template
-- [ ] Environment variables
-- [ ] Secrets management
+- [ ] config.production.json (hedge, pool, cache TTL)
 - [ ] Config validation
-
-Files:
-- config.production.json
-- config.docker.json (update)
 ```
 
 #### Week 8: Launch
 
-**Day 36-37: Deployment**
-```
-Tasks:
-- [ ] Deploy to production
-- [ ] Smoke testing
-- [ ] Monitor metrics
-- [ ] Fix production issues
-```
-
-**Day 38-39: Gradual Rollout**
-```
-Tasks:
-- [ ] 10% traffic
-- [ ] Monitor error rates
-- [ ] 50% traffic
-- [ ] Monitor performance
-- [ ] 100% traffic
-```
-
-**Day 40: Handoff**
-```
-Tasks:
-- [ ] Final documentation
-- [ ] Knowledge transfer
-- [ ] Runbook creation
-- [ ] Post-mortem
-```
-
-**Deliverables:**
-- Production deployment
-- Monitoring dashboards
-- Security audit
-- Runbook
-- Post-mortem
+**Day 36-37: Deploy + smoke test + monitor.**
+**Day 38-39: Gradual rollout 10% → 50% → 100%, theo dõi p99 & error rate.**
+**Day 40: Handoff** (docs, runbook, knowledge transfer, post-mortem).
 
 **Success Criteria:**
-- [ ] 99.9% uptime
-- [ ] Error rate <1%
-- [ ] 99th percentile latency <15s
-- [ ] Positive user feedback
+- [ ] Error rate < 1%
+- [ ] p99 < 12s ổn định dưới tải production
+- [ ] TTFT < 2s p50
+- [ ] Feedback tích cực
 
 ---
 
 ## 4. Technical Decisions
 
-### 4.1 Decisions Made
-
+### 4.1 Đã chốt (v2)
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Language | Go | Existing codebase, performance |
-| Intent Classifier | Rule-based | Simpler, faster, debuggable |
-| Tool Execution | Sync | Simpler, predictable |
-| Caching | In-memory | Fast, simple for v1 |
-| Storage | SQLite | Existing, sufficient |
+| API integration | Existing `/v1/chat/completions` opt-in | Tận dụng auth/SSE/response format hiện có |
+| Routing | LOCAL upfront | Cắt 1 model round-trip |
+| Tool planning | Direct local plan first | Path rõ không cần executor RTT |
+| Tool granularity | Số nhiều (read_files)+glob | Gom N file trong 1 turn |
+| Tool execution | Song song (errgroup) | Giảm latency tool tổng |
+| Reasoner flow | Local tools → straight-to-reasoner, ≤1 lần | Bỏ round-trip finalize |
+| Streaming | Bật (SSE passthrough) | TTFT < 2s |
+| Context | Distill trước reasoner | Giảm token = giảm latency |
+| Tail latency | Hedged reasoner request | Cải thiện p99 (cost chấp nhận) |
+| Language | Go | Codebase hiện có, performance |
+| Cache/Queue/Storage | In-memory / in-memory / SQLite | Đủ cho v1 |
 
-### 4.2 Decisions Pending
-
+### 4.2 Pending
 | Decision | Options | Recommendation |
 |----------|---------|----------------|
-| Queue | In-memory vs Redis | In-memory for v1, Redis for scale |
-| Rate Limiting | Token bucket vs Sliding window | Token bucket |
-| Cache TTL | 5min vs 30min vs 1hr | 5min for tool results, 30min for responses |
-| Max Iterations | 3 vs 5 vs 10 | 5 (configurable) |
+| ML classifier | rule vs ML | Rule + fallback cho v1, ML khi accuracy chạm trần |
+| Queue scale | in-memory vs Redis | In-memory v1, Redis khi multi-node |
+| Max iterations | 3/5/10 | 5 (configurable) |
+| hedge_reasoner_ms | 500/800/1200 | Đo thực tế, mặc định 800 |
 
 ---
 
 ## 5. Resource Requirements
 
 ### 5.1 Development
-
 | Resource | Hours | Cost |
 |----------|-------|------|
-| Senior Engineer (review) | 20h | $2000 |
-| Developer (implementation) | 180h | $9000 |
-| **Total** | **200h** | **$11000** |
+| Senior (review + latency gate) | 24h | $2400 |
+| Developer (implementation) | 200h | $10000 |
+| **Total** | **224h** | **$12400** |
 
-### 5.2 Infrastructure
-
-| Resource | Monthly Cost |
-|----------|--------------|
-| Notion AI API | $50-100 |
-| mimo-v2.5-pro API | $20-50 |
-| Monitoring | $0 (self-hosted) |
-| **Total** | **$70-150/month** |
-
-### 5.3 Testing
-
+### 5.2 Infrastructure (monthly)
 | Resource | Cost |
 |----------|------|
-| Load testing | $50 (one-time) |
-| Security audit | $500 (one-time) |
+| Notion AI API (reasoner, có hedging) | $60–120 |
+| mimo-v2.5-pro API (executor) | $20–50 |
+| Monitoring | $0 (self-hosted) |
+| **Total** | **$80–170/tháng** |
+
+### 5.3 Testing (one-time)
+| Resource | Cost |
+|----------|------|
+| Load testing | $50 |
+| Security audit (sandbox) | $500 |
 | **Total** | **$550** |
 
 ---
 
 ## 6. Risk Register
 
-### 6.1 Technical Risks
+### 6.1 Technical
+| Risk | Prob | Impact | Mitigation | Owner |
+|------|------|--------|------------|-------|
+| Reasoner (Notion) chậm/đổi format | Medium | High | Hedging, cache, fallback executor-only, health check | Dev |
+| mimo không emit multi tool-call | Medium | Low | Direct local planner + read_files/glob; executor chỉ fallback | Dev |
+| Notion không hỗ trợ SSE | Medium | Medium | Keepalive/header flush + chunk final; đo riêng header/content TTFT | Dev |
+| Router misroute | Medium | Medium | Fallback an toàn + log cải thiện rule | Dev |
+| Performance dưới tải | Low | High | Load test, cache, pool | Dev |
 
-| Risk | Probability | Impact | Mitigation | Owner |
-|------|-------------|--------|------------|-------|
-| Model API instability | Medium | High | Circuit breaker, fallback | Dev |
-| Tool execution bugs | Medium | Medium | Extensive testing | Dev |
-| Performance issues | Low | High | Load testing, optimization | Dev |
-| Security vulnerabilities | Low | High | Security review, sandbox | Senior |
-
-### 6.2 Operational Risks
-
-| Risk | Probability | Impact | Mitigation | Owner |
-|------|-------------|--------|------------|-------|
-| Cost overrun | Medium | Medium | Budget alerts, rate limiting | PM |
-| Delayed timeline | Medium | Medium | Buffer time, scope reduction | PM |
-| Knowledge gaps | Low | Medium | Documentation, training | Senior |
+### 6.2 Operational
+| Risk | Prob | Impact | Mitigation | Owner |
+|------|------|--------|------------|-------|
+| Cost overrun (hedging) | Medium | Low | Budget alert, hedge có điều kiện theo p99 | PM |
+| Timeline trượt | Medium | Medium | Buffer, cắt scope (execute/ML để sau) | PM |
 
 ---
 
 ## 7. Success Metrics
 
-### 7.1 Technical Metrics
-
+### 7.1 Technical (latency-first)
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Latency (p50) | <5s | Prometheus |
-| Latency (p99) | <15s | Prometheus |
-| Error rate | <2% | Logs |
-| Cache hit rate | >50% | Prometheus |
-| Tool success rate | >95% | Logs |
+| TTFT (p50) | < 2s | Trace |
+| Latency (p50) | < 3s | Prometheus |
+| Latency (p99) | < 12s | Prometheus |
+| Model round-trips (complex) | ≤ 2 | agent_trace |
+| Error rate | < 2% | Logs |
+| Cache hit rate | > 50% | Prometheus |
+| Tool success rate | > 95% | Logs |
 
-### 7.2 Business Metrics
-
+### 7.2 Business
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| User satisfaction | >4/5 | Survey |
+| User satisfaction | > 4/5 | Survey |
 | API adoption | 100 users | Analytics |
-| Cost per request | <$0.01 | Billing |
+| Cost per request | < $0.01 | Billing |
 
 ---
 
 ## 8. Communication Plan
-
-### 8.1 Stakeholders
-
-| Stakeholder | Role | Communication |
-|-------------|------|---------------|
-| Senior Engineer | Architecture review | Weekly sync |
-| Product Manager | Requirements, priorities | Daily standup |
-| Users | Feedback | GitHub issues |
-
-### 8.2 Meetings
-
 | Meeting | Frequency | Attendees |
 |---------|-----------|-----------|
 | Daily standup | Daily | Dev, PM |
-| Architecture review | Weekly | Dev, Senior |
+| Architecture/latency review | Weekly | Dev, Senior |
 | Sprint review | Bi-weekly | All |
-| Retrospective | Monthly | All |
 
 ---
 
 ## 9. Appendix
 
 ### 9.1 Glossary
-
 | Term | Definition |
 |------|------------|
-| Executor | Model that handles tool calls (mimo-v2.5-pro) |
-| Reasoner | Model that handles reasoning (Notion AI) |
-| Agent Loop | Iterative process of tool calls and reasoning |
-| Intent | User's goal (file_read, code_analysis, etc.) |
+| Executor | Model gom context qua tool calls (mimo-v2.5-pro) |
+| Reasoner | Model suy luận trên context đã chắt lọc (Notion AI) |
+| Round-trip | Một lần gọi model từ xa (đơn vị latency chính) |
+| Fast-path | Đường đi không cần tool, 1 RTT |
+| Distill | Chắt lọc context để giảm token reasoner |
+| Prefetch | Đọc tool song song trước khi executor yêu cầu |
+| Hedging | Gửi request reasoner thứ 2 để cắt tail latency |
 
 ### 9.2 References
-
-- [OpenAI Function Calling](https://platform.openai.com/docs/guides/function-calling)
-- [LangChain Agent Architecture](https://docs.langchain.com/docs/)
-- [Notion API Documentation](https://developers.notion.com/)
+- OpenAI Function Calling — https://platform.openai.com/docs/guides/function-calling
+- Go net/http connection pooling, errgroup
 
 ### 9.3 Open Questions for Senior
-
-1. **Architecture**: Single agent loop hay multi-agent parallel?
-2. **Intent Classifier**: Rule-based đủ không, hay cần ML?
-3. **Tool Execution**: Sandboxing scope như thế nào?
-4. **Cost**: Budget approved chưa?
-5. **Timeline**: 8 weeks có aggressive quá không?
-6. **Merge Strategy**: Merge vào api.lgmmo.click thế nào?
+1. Notion endpoint hỗ trợ streaming SSE? Nếu không, đo header/content TTFT riêng.
+2. mimo emit multi tool-call/lượt ổn định? Không blocker nhờ direct local planner. mimo có prefix cache?
+3. hedge_reasoner_ms tối ưu? Ngân sách reasoner cho hedging?
+4. Sandbox scope cho execute (giữ default-off v1)?
+5. 8 tuần có aggressive? Cắt scope nào nếu trượt (ML classifier / execute)?
 
 ---
 
 ## 10. Approval
-
 | Role | Name | Date | Signature |
 |------|------|------|-----------|
 | Senior Engineer | | | |

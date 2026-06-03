@@ -1,0 +1,27 @@
+warning: both GOPATH and GOROOT are the same directory (/home/duy/go); see https://go.dev/wiki/InstallTroubleshooting
+goos: linux
+goarch: amd64
+pkg: notion2api/tests/benchmark
+cpu: AMD Ryzen 7 8845H w/ Radeon 780M Graphics
+BenchmarkRouterDecide/simple_chat-16         	  192532	       577.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRouterDecide/file_read-16           	   61993	      1884 ns/op	     636 B/op	      10 allocs/op
+BenchmarkRouterDecide/file_read_glob-16      	   37728	      2921 ns/op	     620 B/op	       9 allocs/op
+BenchmarkRouterDecide/read_summarize-16      	   39744	      2968 ns/op	     652 B/op	      10 allocs/op
+BenchmarkRouterDecide/list_dir-16            	   78691	      1455 ns/op	     587 B/op	       8 allocs/op
+BenchmarkRouterDecide/search-16              	   58054	      2063 ns/op	     426 B/op	       6 allocs/op
+BenchmarkRouterDecide/code_analysis-16       	   36477	      3240 ns/op	      49 B/op	       1 allocs/op
+BenchmarkRouterDecide/edit_file-16           	   37646	      2975 ns/op	     587 B/op	       8 allocs/op
+BenchmarkRouterDecide/vietnamese_read-16     	   55496	      2173 ns/op	     653 B/op	      10 allocs/op
+BenchmarkRouterDecide/vietnamese_search-16   	   32023	      3208 ns/op	     814 B/op	      15 allocs/op
+BenchmarkToolCallJSONParse/single_file-16    	  140275	       782.5 ns/op	     648 B/op	      14 allocs/op
+BenchmarkToolCallJSONParse/multi_file-16     	  100920	      1155 ns/op	     968 B/op	      25 allocs/op
+BenchmarkToolCallJSONParse/glob_pattern-16   	  155918	       771.9 ns/op	     656 B/op	      14 allocs/op
+BenchmarkToolCallJSONParse/search_with_paths-16         	  105150	      1169 ns/op	     784 B/op	      21 allocs/op
+BenchmarkToolCallJSONParse/edit_file-16                 	  100197	      1124 ns/op	     728 B/op	      19 allocs/op
+BenchmarkToolCallJSONParse/list_dir-16                  	  161038	       723.6 ns/op	     608 B/op	      11 allocs/op
+BenchmarkContextDistill-16                              	   48982	      2480 ns/op	   16790 B/op	      14 allocs/op
+BenchmarkBuildReasonerContext-16                        	  946486	       116.7 ns/op	     224 B/op	       3 allocs/op
+BenchmarkDirectToolPath-16                              	    9060	     13034 ns/op	         0 model_calls	    6397 B/op	      75 allocs/op
+BenchmarkReasonerPath-16                                	    7352	     17229 ns/op	         1.000 reasoner_calls	    7155 B/op	      88 allocs/op
+PASS
+ok  	notion2api/tests/benchmark	2.996s

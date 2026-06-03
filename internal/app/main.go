@@ -874,6 +874,31 @@ func writeJSONBytes(w http.ResponseWriter, status int, body []byte) {
 	_, _ = w.Write(body)
 }
 
+// appendJSONFields merges additional key-value pairs into an existing JSON object body.
+// If body is not a valid JSON object, it is returned unchanged.
+func appendJSONFields(body []byte, extra map[string]any) []byte {
+	if len(extra) == 0 {
+		return body
+	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 || trimmed[len(trimmed)-1] != '}' {
+		return body
+	}
+	trimmed = bytes.TrimSuffix(trimmed, []byte("}"))
+	extraBody, err := json.Marshal(extra)
+	if err != nil {
+		return body
+	}
+	extraBody = bytes.TrimPrefix(extraBody, []byte("{"))
+	out := make([]byte, 0, len(trimmed)+1+len(extraBody))
+	out = append(out, trimmed...)
+	if len(trimmed) > 1 {
+		out = append(out, ',')
+	}
+	out = append(out, extraBody...)
+	return out
+}
+
 func appendHealthzRuntimeFields(body []byte, sessionReady bool, lastRefresh time.Time, lastRefreshError string) []byte {
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 || trimmed[len(trimmed)-1] != '}' {
@@ -1044,11 +1069,14 @@ func (a *App) serveHealthz(w http.ResponseWriter) {
 	a.State.mu.RUnlock()
 	if cached != nil {
 		body := appendHealthzRuntimeFields(*cached, sessionReady, lastRefresh, lastRefreshError)
+		if orchestratorHealthzHook != nil {
+			body = appendJSONFields(body, orchestratorHealthzHook())
+		}
 		writeJSONBytes(w, http.StatusOK, body)
 		return
 	}
 	cfg, session, registry := a.State.Snapshot()
-	writeJSON(w, http.StatusOK, map[string]any{
+	fields := map[string]any{
 		"ok":                         true,
 		"default_model":              cfg.DefaultPublicModel(),
 		"model_count":                len(registry.Entries),
@@ -1059,7 +1087,13 @@ func (a *App) serveHealthz(w http.ResponseWriter) {
 		"session_refresh_enabled":    cfg.ResolveSessionRefresh().Enabled,
 		"last_session_refresh":       formatTimeOrEmpty(lastRefresh),
 		"last_session_refresh_error": lastRefreshError,
-	})
+	}
+	if orchestratorHealthzHook != nil {
+		for k, v := range orchestratorHealthzHook() {
+			fields[k] = v
+		}
+	}
+	writeJSON(w, http.StatusOK, fields)
 }
 
 func (a *App) serveModels(w http.ResponseWriter) {
@@ -1727,11 +1761,17 @@ func (a *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	conversationID := a.startConversationTurn(conversation.ID, preferredConversationID, "api", "chat_completions", resolveRequestPromptForContinuation(normalized), request)
 	setConversationIDHeader(w, conversationID)
 	stream := typed.Stream
+	includeUsage := false
+	if typed.StreamIncludeUsage != nil {
+		includeUsage = *typed.StreamIncludeUsage
+	}
+
+	if shouldUseOrchestratorChat(typed, payload, requestedModelID) {
+		a.handleOrchestratorChatCompletions(w, r, request, entry.ID, includeUsage, conversationID, stream)
+		return
+	}
+
 	if stream {
-		includeUsage := false
-		if typed.StreamIncludeUsage != nil {
-			includeUsage = *typed.StreamIncludeUsage
-		}
 		a.writeChatCompletionLiveStream(w, r, request, entry.ID, includeUsage, conversationID)
 		return
 	}
