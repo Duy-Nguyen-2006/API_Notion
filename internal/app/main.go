@@ -1732,7 +1732,7 @@ func (a *App) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		SessionFingerprint: originalFingerprint,
 		RawMessageCount:    originalRawMessageCount,
 	}
-	if hasTools && !typed.Stream {
+	if hasTools && !typed.Stream && !shouldUseOrchestratorChat(typed, payload, requestedModelID) {
 		if toolCalls, ok := synthesizeToolCallFromMessages(typed.Messages, toolDefs, typed.ToolChoice); ok {
 			writeJSON(w, http.StatusOK, buildSyntheticToolCallCompletion(latestPrompt, toolCalls, entry.ID))
 			return
